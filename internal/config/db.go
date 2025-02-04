@@ -2,9 +2,8 @@ package config
 
 import (
 	"context"
-	"fmt"
-	"log"
 
+	"github.com/fatih/color"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -16,9 +15,9 @@ func ConnectDatabase() {
 	pool, err := pgxpool.New(context.Background(), dbURL)
 
 	if err != nil {
-		fmt.Printf("❌ Failed to connect to the database: %s\n", err)
+		color.Red("❌ Failed to connect to the database: %s\n", err)
 	} else {
-		log.Println("✅ Connected to TimescaleDB")
+		color.Green("✅ Connected to TimescaleDB")
 	}
 
 	DbPool = pool

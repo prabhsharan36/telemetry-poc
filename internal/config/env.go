@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/fatih/color"
 	"github.com/joho/godotenv"
 )
 
@@ -16,7 +17,7 @@ func LoadEnv() {
 	environmentPath := filepath.Join(dir, ".env")
 	err = godotenv.Load(environmentPath)
 	if err != nil {
-		log.Println("❌ Error loading .env file")
+		color.Red("❌ Error loading .env file")
 	}
 }
 

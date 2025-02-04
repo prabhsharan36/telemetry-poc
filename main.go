@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,9 +11,25 @@ import (
 
 	"telemetry/internal/config"
 	"telemetry/internal/handlers"
+
+	"github.com/fatih/color"
 )
 
+func abc() (int, error) {
+	if f := 0; f == 0 {
+		return 0, fmt.Errorf("math: square root of negative number %g", f)
+	}
+
+	return 0, nil
+}
+
 func main() {
+	value, err := abc()
+
+	if err != nil {
+		fmt.Println(value, err)
+	}
+
 	config.LoadEnv()
 	config.ConnectDatabase()
 	// port := config.GetEnv("PORT", "8080")
@@ -30,7 +47,7 @@ func main() {
 	}
 
 	go func() {
-		log.Println("✅ Starting server on", srv.Addr)
+		color.Green("✅ Starting server on %s", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("listen: %s\n", err)
 		}
