@@ -2,94 +2,56 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"telemetry/config"
+	"os"
+	"os/signal"
+	"time"
 
-	"github.com/gin-gonic/gin"
+	"telemetry/internal/config"
+	"telemetry/internal/handlers"
 )
-
-type TelemetryData struct {
-	EventType string                 `json:"eventType"`
-	UUID      string                 `json:"uuid"`
-	CreatedAt string                 `json:"createdAt"`
-	Data      map[string]interface{} `json:"data"`
-}
-
-func SaveTelemetryToDB(data TelemetryData) error {
-	dataJSON, err := json.Marshal(data.Data)
-
-	if err != nil {
-		return fmt.Errorf("failed to serialize data: %w", err)
-	}
-
-	query := `
-		INSERT INTO telemetry_data (event_type, created_at, uuid, data)
-		VALUES ($1, $2, $3, $4)
-	`
-	_, err = dbPool.Exec(context.Background(), query, data.EventType, data.CreatedAt, data.UUID, dataJSON)
-
-	if err != nil {
-		return fmt.Errorf("failed to insert telemetry data: %w", err)
-	}
-
-	return nil
-}
-
-func TelemetryHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
-
-	if err != nil {
-		http.Error(w, "Failed to read request body", http.StatusInternalServerError)
-
-		return
-	}
-
-	defer r.Body.Close()
-
-	// Parse the JSON payload
-	var telemetry TelemetryData
-
-	if err := json.Unmarshal(body, &telemetry); err != nil {
-		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
-
-		return
-	}
-
-	fmt.Printf("Received telemetry event: %+v\n", telemetry)
-
-	if err := SaveTelemetryToDB(telemetry); err != nil {
-		http.Error(w, "Failed to save telemetry data", http.StatusInternalServerError)
-		fmt.Printf("Error: %s\n", err)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte("Telemetry data received and saved successfully"))
-}
 
 func main() {
 	config.LoadEnv()
-	port := config.GetEnv("PORT", "8080")
-	r := gin.Default()
-	r.GET("/", handlers.HomeHandler)
+	config.ConnectDatabase()
+	// port := config.GetEnv("PORT", "8080")
 
-	http.HandleFunc("/capture-event", TelemetryHandler)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/capture-event", handlers.TelemetryHandler)
 
-	log.Printf("Server running on port %s", port)
-
-	if err := http.ListenAndServe(port, nil); err != nil {
-		fmt.Printf("Error starting server: %s\n", err)
+	handler := loggingMiddleware(mux)
+	srv := &http.Server{
+		Addr:         ":8080",
+		Handler:      handler,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  15 * time.Second,
 	}
 
-	defer dbPool.Close()
+	go func() {
+		log.Println("✅ Starting server on", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+	<-quit
+	log.Println("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
+	}
+	log.Println("Server exiting")
+}
+
+func loggingMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		next.ServeHTTP(w, r)
+		log.Printf("%s %s %v", r.Method, r.URL.Path, time.Since(start))
+	})
 }

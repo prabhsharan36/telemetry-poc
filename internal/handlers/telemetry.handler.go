@@ -7,7 +7,7 @@ import (
 	"io"
 	"net/http"
 
-	"telemetry/config"
+	"telemetry/internal/config"
 )
 
 type TelemetryData struct {
