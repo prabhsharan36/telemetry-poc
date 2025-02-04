@@ -1,15 +1,13 @@
-package main
+package handlers
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
-	"telemetry/config"
 
-	"github.com/gin-gonic/gin"
+	"telemetry/config"
 )
 
 type TelemetryData struct {
@@ -17,26 +15,6 @@ type TelemetryData struct {
 	UUID      string                 `json:"uuid"`
 	CreatedAt string                 `json:"createdAt"`
 	Data      map[string]interface{} `json:"data"`
-}
-
-func SaveTelemetryToDB(data TelemetryData) error {
-	dataJSON, err := json.Marshal(data.Data)
-
-	if err != nil {
-		return fmt.Errorf("failed to serialize data: %w", err)
-	}
-
-	query := `
-		INSERT INTO telemetry_data (event_type, created_at, uuid, data)
-		VALUES ($1, $2, $3, $4)
-	`
-	_, err = dbPool.Exec(context.Background(), query, data.EventType, data.CreatedAt, data.UUID, dataJSON)
-
-	if err != nil {
-		return fmt.Errorf("failed to insert telemetry data: %w", err)
-	}
-
-	return nil
 }
 
 func TelemetryHandler(w http.ResponseWriter, r *http.Request) {
@@ -73,23 +51,29 @@ func TelemetryHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	fmt.Printf("Saved telemetry event: %+v\n", err)
+
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("Telemetry data received and saved successfully"))
 }
 
-func main() {
-	config.LoadEnv()
-	port := config.GetEnv("PORT", "8080")
-	r := gin.Default()
-	r.GET("/", handlers.HomeHandler)
+func SaveTelemetryToDB(data TelemetryData) error {
+	dataJSON, err := json.Marshal(data.Data)
 
-	http.HandleFunc("/capture-event", TelemetryHandler)
-
-	log.Printf("Server running on port %s", port)
-
-	if err := http.ListenAndServe(port, nil); err != nil {
-		fmt.Printf("Error starting server: %s\n", err)
+	if err != nil {
+		return fmt.Errorf("failed to serialize data: %w", err)
 	}
 
-	defer dbPool.Close()
+	query := `
+		INSERT INTO telemetry_data (event_type, created_at, uuid, data)
+		VALUES ($1, $2, $3, $4)
+	`
+
+	_, err = config.DbPool.Exec(context.Background(), query, data.EventType, data.CreatedAt, data.UUID, dataJSON)
+
+	if err != nil {
+		return fmt.Errorf("failed to insert telemetry data: %w", err)
+	}
+
+	return nil
 }
